@@ -12,8 +12,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 import time
+import http.client
 
-file_path = "appointments.json"  # Stellen Sie sicher, dass diese Zeile vor der while-Schleife steht
+file_path = "appointments.json"
+config = {}  # Globale Konfigurationsvariable
 
 def get_resource_path(relative_path):
     try:
@@ -27,6 +29,14 @@ def play_sound():
     sound_path = get_resource_path("alert_sound.mp3")
     pygame.mixer.music.load(sound_path)
     pygame.mixer.music.play(loops=-1)
+
+def send_pushover_notification(message, user_key, app_token):
+    conn = http.client.HTTPSConnection("api.pushover.net:443")
+    conn.request("POST", "/1/messages.json",
+                 body=f"token={app_token}&user={user_key}&message=" + message,
+                 headers={"Content-type": "application/x-www-form-urlencoded"})
+    response = conn.getresponse()
+    print(response.status, response.reason)
 
 def show_popup(changes):
     root = tk.Tk()
@@ -61,19 +71,23 @@ def get_appointment_data(html):
     print("Insgesamt gefundene Termine:", len(appointments))
     return appointments
 
-def save_config(kind_id, payer_id, count_children, age_min, age_max, window):
+def save_config(kind_id, payer_id, count_children, age_min, age_max, pushover_user, pushover_token, window):
     config = {
         "cure_kind_id": kind_id,
         "cure_payer_id": payer_id,
         "count_children": count_children,
         "age_children_min": age_min,
-        "age_children_max": age_max
+        "age_children_max": age_max,
+        "pushover_user": pushover_user,
+        "pushover_token": pushover_token
     }
     with open('config.json', 'w') as config_file:
         json.dump(config, config_file)
     window.destroy()
 
 def show_config_window():
+    global config  # Füge diese Zeile hinzu, um auf die globale Variable zuzugreifen
+
     window = tk.Tk()
     window.title("Konfigurationseinstellungen")
 
@@ -119,18 +133,36 @@ def show_config_window():
     age_max = tk.Entry(window)
     age_max.grid(row=4, column=1)
 
+    # Pushover User-Key Eingabefeld
+    tk.Label(window, text="Pushover User-Key:").grid(row=6, column=0)
+    pushover_user = tk.Entry(window)
+    pushover_user.grid(row=6, column=1)
+
+    # Pushover API-Token Eingabefeld
+    tk.Label(window, text="Pushover API-Token:").grid(row=7, column=0)
+    pushover_token = tk.Entry(window)
+    pushover_token.grid(row=7, column=1)
+
     # Speichern Button
-    save_button = tk.Button(window, text="Speichern", command=lambda: save_config(cure_kind_options[cure_kind.get()], cure_payer_options[cure_payer.get()], count_children.get(), age_min.get(), age_max.get(), window))
-    save_button.grid(row=5, column=1)
+    save_button = tk.Button(window, text="Speichern", command=lambda: save_config(
+        cure_kind_options[cure_kind.get()], cure_payer_options[cure_payer.get()],
+        count_children.get(), age_min.get(), age_max.get(),
+        pushover_user.get(), pushover_token.get(), window))
+    save_button.grid(row=8, column=1)
 
     window.mainloop()
-
-# Config-Datei prüfen
+    # Überprüfen Sie, ob Pushover-Einstellungen vorhanden sind
+    if config.get("pushover_user") and config.get("pushover_token"):
+        pushover_enabled = True
+        pushover_user = config["pushover_user"]
+        pushover_token = config["pushover_token"]
+    else:
+        pushover_enabled = False
+        
 config_path = 'config.json'
 if not os.path.exists(config_path):
     show_config_window()
 
-# Config-Daten lesen
 with open(config_path, 'r') as config_file:
     config = json.load(config_file)
 
@@ -140,6 +172,14 @@ count_children_value = config["count_children"]
 age_min_value = config["age_children_min"]
 age_max_value = config["age_children_max"]
 
+if config.get("pushover_user") and config.get("pushover_token"):
+    pushover_enabled = True
+    pushover_user = config["pushover_user"]
+    pushover_token = config["pushover_token"]
+else:
+    pushover_enabled = False
+    
+# Definiere Chrome-Optionen
 chrome_options = Options()
 chrome_options.add_argument("--headless")
 
@@ -192,6 +232,11 @@ while True:
         sound_thread = threading.Thread(target=play_sound)
         sound_thread.start()
         show_popup(changes)
+
+        # Senden einer Pushover-Benachrichtigung, wenn aktiviert
+        if pushover_enabled:
+            for change in changes:
+                send_pushover_notification(change, pushover_user, pushover_token)
 
     with open(file_path, 'w', encoding='utf-8') as file:
         json.dump(list(new_appointment_set), file)
