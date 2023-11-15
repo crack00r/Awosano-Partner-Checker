@@ -1,4 +1,4 @@
-# Kur App - Automatisierte Terminsuche für Kuren
+# Kur App - Automatisierte Terminsuche für Kuren bei https://awosano-partner.de/
 
 ## Projektbeschreibung
 Diese Anwendung ist ein automatisiertes Tool, entwickelt zur Suche und Benachrichtigung über verfügbare Termine für Kuren. Es richtet sich an Nutzer, die effizient und unkompliziert freie Kurtermine finden möchten. Die Anwendung nutzt Web-Scraping-Techniken, um aktuelle Termininformationen von einer vorgegebenen Website zu extrahieren.
